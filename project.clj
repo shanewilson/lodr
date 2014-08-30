@@ -8,4 +8,5 @@
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [liberator "0.12.1"]
                  [compojure "1.1.8"]
+                 [clojurewerkz/elastisch "2.1.0-beta4"]
                  [ring/ring-core "1.3.1"]])
