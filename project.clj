@@ -10,4 +10,5 @@
                  [compojure "1.1.8"]
                  [clojurewerkz/elastisch "2.1.0-beta4"]
                  [prone "0.6.0"]
+                 [prismatic/schema "0.2.6"]
                  [ring/ring-core "1.3.1"]])
