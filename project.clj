@@ -11,4 +11,6 @@
                  [clojurewerkz/elastisch "2.1.0-beta4"]
                  [prone "0.6.0"]
                  [prismatic/schema "0.2.6"]
+                 [instaparse "1.3.3"]
+                 [rhizome "0.2.1"]
                  [ring/ring-core "1.3.1"]])

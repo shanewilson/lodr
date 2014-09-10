@@ -1,5 +1,4 @@
 (ns lodr.core
-  (:import [clojure.lang Keyword])
   (:require [liberator.core :refer [resource defresource]]
             [liberator.dev :refer [wrap-trace]]
             [ring.middleware.params :refer [wrap-params]]
@@ -12,14 +11,68 @@
             [prone.debug :refer [debug]]
             [schema.core :as s]
             [schema.macros :as sm]
-            [schema.coerce :as coerce]))
+            [schema.coerce :as coerce]
+            [instaparse.core :as insta]
+            ))
 
 (def conn (es/connect [["127.0.0.1" 9300]]
                       {"cluster.name" "elasticsearch_swilson"}))
 
+(def query-parser
+  (insta/parser
+     "expr = s-exp
+     <s-exp> = or / and / is-not
+     <parens> = <'('> s-exp <')'>
+     or = s-exp <'OR'> is-not
+     and = s-exp <'AND'> is-not
+     <is-not> = is | not | parens
+     is = field <'IS'> value
+     not = field <'IS NOT'> value
+     (* fields cannot be free text *)
+     field = word
+     (* values can be a term or a list of terms separated by OR*)
+     value = terms | term
+     (* terms must have at least term OR term*)
+     <terms> = (term <'OR'>)+ term
+     (* term can be free text or a word *)
+     <term> = text | word
+     (* free text can support spaces but must be quoted *)
+     <text> = <'\"'> #'[A-Za-z0-9-_ ]+' <'\"'>
+     <word> = #'[A-Za-z0-9-_.]+'"
+    :string-ci true
+    ;:output-format :enlive
+    :auto-whitespace :standard))
+
+(def transform-options
+  {:number read-string
+   :vector (comp vec list)
+   :expr identity})
+
+(defn parse [input]
+  (->> (query-parser input) (insta/transform transform-options)))
+
+;(def AnnotationFilter
+;  {(s/optional-key :one)  (s/either s/Str [s/Str])
+;   (s/optional-key :two) s/Str})
+;
+;(def SampleFilter
+;  {(s/optional-key :id)         s/Str
+;   (s/optional-key :code)       s/Str
+;   (s/optional-key :annotation) AnnotationFilter})
+
+(sm/defrecord AnnotationFilter
+              [one :- (s/either s/Str [s/Str])
+               two :- (s/either s/Str [s/Str])])
+
+(sm/defrecord SampleFilter
+              [id :- s/Str
+               code :- s/Str
+               ;miss :- s/Str
+               annotation :- AnnotationFilter])
+
 (sm/defrecord FilterParams
               [participant :- {s/Keyword s/Str}
-               sample :- {s/Keyword s/Str}
+               sample :- SampleFilter
                portion :- {s/Keyword s/Str}
                analyte :- {s/Keyword s/Str}
                aliquot :- {s/Keyword s/Str}
@@ -46,7 +99,7 @@
     (merge-with merge obj (group-fields (rest xs) v))))
 
 (defn group-filters-by [field data]
-  (let [f-data (filterv (fn [[a _]] (.startsWith (name a) (name field))) data)]
+  (let [f-data (filter (fn [[a _]] (.startsWith (name a) (name field))) data)]
     (reduce parse-nested-fields {} f-data)))
 
 (def query-params-coercer
@@ -61,15 +114,21 @@
     :projectCode :admin.project_code
     })
 
+(defn get-sample-params [params]
+  (let [grouped (group-filters-by :sample params)
+        annotated (conj grouped {:annotation (map->AnnotationFilter (:annotation grouped))})]
+    (map->SampleFilter annotated)))
+
 (defn get-filters [params]
   (let [filters {:participant (group-filters-by :participant params)
-                 :sample      (group-filters-by :sample params)
+                 :sample      (get-sample-params params)
                  :portion     (group-filters-by :portion params)
                  :analyte     (group-filters-by :analyte params)
                  :aliquot     (group-filters-by :aliquot params)
-                 :files       (group-filters-by :files params)}]
+                 :files       (group-filters-by :files params)}
+        thing (filter-coercer (map->FilterParams filters))]
     (debug)
-    (filter-coercer (map->FilterParams filters))))
+    thing))
 
 (defn parse-query-params [params]
   (let [params (clojure.walk/keywordize-keys params)
