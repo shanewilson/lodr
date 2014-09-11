@@ -12,44 +12,11 @@
             [schema.core :as s]
             [schema.macros :as sm]
             [schema.coerce :as coerce]
-            [instaparse.core :as insta]
-            ))
+
+            [lodr.parser :refer [parse]]))
 
 (def conn (es/connect [["127.0.0.1" 9300]]
                       {"cluster.name" "elasticsearch_swilson"}))
-
-(def query-parser
-  (insta/parser
-     "expr = s-exp
-     <s-exp> = or / and / is-not
-     <parens> = <'('> s-exp <')'>
-     or = s-exp <'OR'> is-not
-     and = s-exp <'AND'> is-not
-     <is-not> = is | not | parens
-     is = field <'IS'> value
-     not = field <'IS NOT'> value
-     (* fields cannot be free text *)
-     field = word
-     (* values can be a term or a list of terms separated by OR*)
-     value = terms | term
-     (* terms must have at least term OR term*)
-     <terms> = (term <'OR'>)+ term
-     (* term can be free text or a word *)
-     <term> = text | word
-     (* free text can support spaces but must be quoted *)
-     <text> = <'\"'> #'[A-Za-z0-9-_ ]+' <'\"'>
-     <word> = #'[A-Za-z0-9-_.]+'"
-    :string-ci true
-    ;:output-format :enlive
-    :auto-whitespace :standard))
-
-(def transform-options
-  {:number read-string
-   :vector (comp vec list)
-   :expr identity})
-
-(defn parse [input]
-  (->> (query-parser input) (insta/transform transform-options)))
 
 ;(def AnnotationFilter
 ;  {(s/optional-key :one)  (s/either s/Str [s/Str])
